@@ -99,7 +99,7 @@ public class VersionService {
      *         if the version number can't be resolved.
      */
     public synchronized Version getLatestFinalVersion() {
-        refreshLatestVersion();
+        // refreshLatestVersion();
         return latestFinalVersion;
     }
 
@@ -110,7 +110,7 @@ public class VersionService {
      *         if the version number can't be resolved.
      */
     public synchronized Version getLatestBetaVersion() {
-        refreshLatestVersion();
+        // refreshLatestVersion();
         return latestBetaVersion;
     }
 
@@ -155,14 +155,17 @@ public class VersionService {
      * @return Whether a new final version of Subsonic is available.
      */
     public boolean isNewFinalVersionAvailable() {
-        Version latest = getLatestFinalVersion();
-        Version local = getLocalVersion();
+        // disabled checking for new versions
+        return false;
 
-        if (latest == null || local == null) {
-            return false;
-        }
+        // Version latest = getLatestFinalVersion();
+        // Version local = getLocalVersion();
 
-        return local.compareTo(latest) < 0;
+        // if (latest == null || local == null) {
+        //     return false;
+        // }
+
+        // return local.compareTo(latest) < 0;
     }
 
     /**
@@ -171,14 +174,17 @@ public class VersionService {
      * @return Whether a new beta version of Subsonic is available.
      */
     public boolean isNewBetaVersionAvailable() {
-        Version latest = getLatestBetaVersion();
-        Version local = getLocalVersion();
+        // disabled checking for new versions
+        return false;
 
-        if (latest == null || local == null) {
-            return false;
-        }
+        // Version latest = getLatestBetaVersion();
+        // Version local = getLocalVersion();
 
-        return local.compareTo(latest) < 0;
+        // if (latest == null || local == null) {
+        //     return false;
+        // }
+
+        // return local.compareTo(latest) < 0;
     }
 
     /**
