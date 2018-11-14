@@ -55,7 +55,7 @@ public class LicenseInfo {
     }
 
     public boolean isLicenseValid() {
-        return licenseValid;
+        return true;
     }
 
     public void setLicenseValid(boolean licenseValid) {
@@ -63,15 +63,15 @@ public class LicenseInfo {
     }
 
     public boolean isTrial() {
-        return trialExpires != null && !licenseValid;
+        return false;
     }
 
     public boolean isTrialExpired() {
-        return trialExpires != null && (trialExpires.before(new Date()) || trialDaysLeft > SettingsService.TRIAL_DAYS + 1);
+        return false;
     }
 
     public boolean isLicenseOrTrialValid() {
-        return isLicenseValid() || !isTrialExpired();
+        return true;
     }
 
     public Date getTrialExpires() {
