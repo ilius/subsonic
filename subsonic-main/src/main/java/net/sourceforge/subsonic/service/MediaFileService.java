@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -51,7 +52,7 @@ import net.sourceforge.subsonic.service.metadata.MetaDataParser;
 import net.sourceforge.subsonic.service.metadata.MetaDataParserFactory;
 import net.sourceforge.subsonic.util.FileUtil;
 
-import static net.sourceforge.subsonic.domain.MediaFile.MediaType.*;
+import static net.sourceforge.subsonic.domain.MediaFile.MediaType;
 
 /**
  * Provides services for instantiating and caching media files and cover art.
@@ -59,6 +60,14 @@ import static net.sourceforge.subsonic.domain.MediaFile.MediaType.*;
  * @author Sindre Mehus
  */
 public class MediaFileService {
+
+	public static enum DirType {
+		NOMEDIA, // directory does not contain any media files, should be skipped
+		LANGUAGE, // directory represents a language
+		GENRE, // directory represents a genre
+		ARTIST, // directory represents an artists, either containing albums or songs or both (or any folder containing songs)
+		ALBUM, // directory represents an album, most likely by a specific artist
+	}
 
     private static final Logger LOG = Logger.getLogger(MediaFileService.class);
 
@@ -418,6 +427,24 @@ public class MediaFileService {
         return result;
     }
 
+	private List<File> filterAudioFiles(File[] files) {
+		List<File> result = new ArrayList<File>();
+		for (File child : files) {
+			if (!FileUtil.isFile(child)) {
+				continue;
+			}
+			if (isExcluded(child)) {
+				continue;
+			}
+			String suffix = FilenameUtils.getExtension(child.getName()).toLowerCase();
+			if (!isAudioFile(suffix)) {
+				continue;
+			}
+			result.add(child);
+		}
+		return result;
+	}
+
     private boolean isAudioFile(String suffix) {
         for (String s : settingsService.getMusicFileTypesAsArray()) {
             if (suffix.equals(s.toLowerCase())) {
@@ -449,42 +476,63 @@ public class MediaFileService {
         return (name.startsWith(".") && !name.startsWith("..")) || name.startsWith("@eaDir") || name.equals("Thumbs.db");
     }
 
-	// should it return MediaType?
-	private void detectDirectoryMediaType(File file, MediaFile mediaFile) {
-		File[] children = FileUtil.listFiles(file);
-		File firstChild = null;
-		for (File child : filterMediaFiles(children)) {
-			if (FileUtil.isFile(child)) {
-				firstChild = child;
-				break;
-			}
+	private DirType detectDirectoryType(File dir, List<File> dirSongs) {
+		if (FileUtil.exists(new File(dir, ".nomedia"))) {
+			return DirType.NOMEDIA;
 		}
+		if (FileUtil.exists(new File(dir, ".artist"))) {
+			return DirType.ARTIST;
+		}
+		if (FileUtil.exists(new File(dir, ".album"))) {
+			return DirType.ALBUM;
+		}
+		if (FileUtil.exists(new File(dir, ".genre"))) {
+			return DirType.GENRE;
+		}
+		if (FileUtil.exists(new File(dir, ".lang"))) {
+			return DirType.LANGUAGE;
+		}
+		if (dirSongs.size() > 0) { // > 0 or > 3?
+			return DirType.ALBUM;
+		}
+		return DirType.ARTIST;
+	}
 
-		if (firstChild != null) {
-			mediaFile.setMediaType(ALBUM);
+	private void detectDirectoryMediaType(File dir, MediaFile mediaFile) {
+		File[] dirFiles = FileUtil.listFiles(dir);
+		List<File> dirSongs = filterAudioFiles(dirFiles);
+		DirType dirType = detectDirectoryType(dir, dirSongs);
+		if (dirType == DirType.ARTIST) {
+			mediaFile.setArtist(dir.getName());
+			return;
+		}
+		if (dirType != DirType.ALBUM) {
+			return;
+		}
+		
+		mediaFile.setMediaType(MediaType.ALBUM);
 
-			// Guess artist/album name, year and genre.
-			MetaDataParser parser = metaDataParserFactory.getParser(firstChild);
+		// Guess artist/album name, year and genre.
+		for (File song : dirSongs) {
+			MetaDataParser parser = metaDataParserFactory.getParser(song);
 			if (parser != null) {
-				MetaData metaData = parser.getMetaData(firstChild);
+				MetaData metaData = parser.getMetaData(song);
 				mediaFile.setArtist(metaData.getAlbumArtist());
 				mediaFile.setAlbumName(metaData.getAlbumName());
 				mediaFile.setYear(metaData.getYear());
 				mediaFile.setGenre(metaData.getGenre());
+				break;
 			}
+		}
 
-			// Look for cover art.
-			try {
-				File coverArt = findCoverArt(children);
-				if (coverArt != null) {
-					mediaFile.setCoverArtPath(coverArt.getPath());
-				}
-			} catch (IOException x) {
-				LOG.error("Failed to find cover art.", x);
+		// Look for cover art.
+		try {
+			File coverArt = findCoverArt(dirFiles);
+			if (coverArt != null) {
+				mediaFile.setCoverArtPath(coverArt.getPath());
 			}
-
-		} else {
-			mediaFile.setArtist(file.getName());
+		} catch (IOException x) {
+			LOG.error("Failed to find cover art.", x);
 		}
 	}
 
@@ -504,7 +552,7 @@ public class MediaFileService {
         mediaFile.setComment(existingFile == null ? null : existingFile.getComment());
         mediaFile.setChildrenLastUpdated(new Date(0));
         mediaFile.setCreated(lastModified);
-        mediaFile.setMediaType(DIRECTORY);
+        mediaFile.setMediaType(MediaType.DIRECTORY);
         mediaFile.setPresent(true);
 
         if (file.isFile()) {
@@ -544,17 +592,17 @@ public class MediaFileService {
 
     private MediaFile.MediaType getMediaType(MediaFile mediaFile) {
         if (isVideoFile(mediaFile.getFormat())) {
-            return VIDEO;
+            return MediaType.VIDEO;
         }
         String path = mediaFile.getPath().toLowerCase();
         String genre = StringUtils.trimToEmpty(mediaFile.getGenre()).toLowerCase();
         if (path.contains("podcast") || genre.contains("podcast")) {
-            return PODCAST;
+            return MediaType.PODCAST;
         }
         if (path.contains("audiobook") || genre.contains("audiobook") || path.contains("audio book") || genre.contains("audio book")) {
-            return AUDIOBOOK;
+            return MediaType.AUDIOBOOK;
         }
-        return MUSIC;
+        return MediaType.MUSIC;
     }
 
     public void refreshMediaFile(MediaFile mediaFile) {
