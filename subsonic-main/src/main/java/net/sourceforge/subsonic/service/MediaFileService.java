@@ -449,6 +449,45 @@ public class MediaFileService {
         return (name.startsWith(".") && !name.startsWith("..")) || name.startsWith("@eaDir") || name.equals("Thumbs.db");
     }
 
+	// should it return MediaType?
+	private void detectDirectoryMediaType(File file, MediaFile mediaFile) {
+		File[] children = FileUtil.listFiles(file);
+		File firstChild = null;
+		for (File child : filterMediaFiles(children)) {
+			if (FileUtil.isFile(child)) {
+				firstChild = child;
+				break;
+			}
+		}
+
+		if (firstChild != null) {
+			mediaFile.setMediaType(ALBUM);
+
+			// Guess artist/album name, year and genre.
+			MetaDataParser parser = metaDataParserFactory.getParser(firstChild);
+			if (parser != null) {
+				MetaData metaData = parser.getMetaData(firstChild);
+				mediaFile.setArtist(metaData.getAlbumArtist());
+				mediaFile.setAlbumName(metaData.getAlbumName());
+				mediaFile.setYear(metaData.getYear());
+				mediaFile.setGenre(metaData.getGenre());
+			}
+
+			// Look for cover art.
+			try {
+				File coverArt = findCoverArt(children);
+				if (coverArt != null) {
+					mediaFile.setCoverArtPath(coverArt.getPath());
+				}
+			} catch (IOException x) {
+				LOG.error("Failed to find cover art.", x);
+			}
+
+		} else {
+			mediaFile.setArtist(file.getName());
+		}
+	}
+
     private MediaFile createMediaFile(File file) {
 
         MediaFile existingFile = mediaFileDao.getMediaFile(file.getPath());
@@ -496,41 +535,7 @@ public class MediaFileService {
 
             // Is this an album?
             if (!isRoot(mediaFile)) {
-                File[] children = FileUtil.listFiles(file);
-                File firstChild = null;
-                for (File child : filterMediaFiles(children)) {
-                    if (FileUtil.isFile(child)) {
-                        firstChild = child;
-                        break;
-                    }
-                }
-
-                if (firstChild != null) {
-                    mediaFile.setMediaType(ALBUM);
-
-                    // Guess artist/album name, year and genre.
-                    MetaDataParser parser = metaDataParserFactory.getParser(firstChild);
-                    if (parser != null) {
-                        MetaData metaData = parser.getMetaData(firstChild);
-                        mediaFile.setArtist(metaData.getAlbumArtist());
-                        mediaFile.setAlbumName(metaData.getAlbumName());
-                        mediaFile.setYear(metaData.getYear());
-                        mediaFile.setGenre(metaData.getGenre());
-                    }
-
-                    // Look for cover art.
-                    try {
-                        File coverArt = findCoverArt(children);
-                        if (coverArt != null) {
-                            mediaFile.setCoverArtPath(coverArt.getPath());
-                        }
-                    } catch (IOException x) {
-                        LOG.error("Failed to find cover art.", x);
-                    }
-
-                } else {
-                    mediaFile.setArtist(file.getName());
-                }
+				detectDirectoryMediaType(file, mediaFile);
             }
         }
 
